@@ -1,0 +1,58 @@
+import urllib.parse
+import datetime
+import boto3
+import zipfile
+import os.path
+ 
+print('Loading function...')
+
+s3 = boto3.resource('s3')
+s3_cli = boto3.client('s3')
+
+def lambda_handler(event, context):
+ 
+    now = datetime.datetime.now()
+    fileNameDateTime = now.strftime('%Y%m%d_%H%M%S')
+    zipFileName = '/tmp/zipfile_' + fileNameDateTime + '.zip'
+    
+    try:
+ 
+        # Get bucket name and uploaded file path
+        print('Getting bucket name and uploaded file path...')
+        input_bucket = event['Records'][0]['s3']['bucket']['name']
+        input_key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+    
+        # Get file name and extension
+        print('Getting file name and extension...')
+        root, ext = os.path.splitext(input_key.replace("input/",""))
+        
+        uploadZipFileName = 'output/' + root + '_' + fileNameDateTime + '.zip'
+
+        file_path = '/tmp/originalFile_' + fileNameDateTime + ext
+    
+
+        # Get bucket object
+        print('Getting bucket object...')
+        bucket = s3.Bucket(input_bucket)
+
+        # Download s3 file
+        print('Downloading s3 file...')
+        bucket.download_file(input_key, file_path)
+        
+        
+        # Zip uploaded file
+        print('Zipping uploaded file...')
+        with zipfile.ZipFile( zipFileName, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(file_path, root + ext)
+            
+        # Upload ziped file
+        print('Uploading ziped file...')
+        bucket.upload_file( zipFileName, uploadZipFileName)
+ 
+ 
+    except Exception as e:
+        print(e)
+        print('Opps, Error happened')
+        raise e
+        
+    print('Finish function!')
