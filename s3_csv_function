@@ -1,0 +1,54 @@
+import json
+import urllib.parse
+import boto3
+import csv
+import codecs
+import re
+ 
+print('Loading function')
+ 
+s3 = boto3.client('s3')
+ 
+ 
+class OutputDocument:
+    def __init__(self, id, name, description):
+        self.id = id
+        self.name = name
+        self.description = description
+ 
+    def create_dictionay(self):
+        return {"id": self.id, "name": self.name, "description": self.description}
+ 
+# S3にアップロード
+def upload_file(bucket_name, file_key, bytes):
+    out_s3 = boto3.resource('s3')
+    s3Obj = out_s3.Object(bucket_name, file_key)
+    res = s3Obj.put(Body = bytes)
+    return res
+ 
+ 
+def lambda_handler(event, context):
+ 
+    # Get the object from the event and show its content type
+    input_bucket = event['Records'][0]['s3']['bucket']['name']
+    input_key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+    output_bucket = input_bucket
+    output_key = re.sub('^input', 'output', input_key).replace(".csv", ".json")
+    
+    try:
+        response = s3.get_object(Bucket=input_bucket, Key=input_key)
+        lines = response[u'Body'].read().decode('utf-8').split()
+        text_string = ""
+        
+        for row in csv.reader(lines):
+            document = OutputDocument(row[0], row[1], row[2])
+            json_text = json.dumps(document.create_dictionay(), ensure_ascii=False)
+            text_string = text_string + json_text + "\n"
+            
+        upload_file(output_bucket, output_key, bytes(text_string, 'UTF-8'))
+ 
+ 
+    except Exception as e:
+        print(e)
+        print('Error getting object {} from bucket {}. Make sure they exist and your bucket is in the same region as this function.'.format(key, bucket))
+        raise e
